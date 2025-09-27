@@ -10,10 +10,20 @@ dotenv.config();
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const RSS_FEED_URL = process.env.RSS_FEED_URL;
+const PROWLARR_URL = process.env.PROWLARR_URL;
+const PROWLARR_API_KEY = process.env.PROWLARR_API_KEY;
+const INDEXER_ID = process.env.INDEXER_ID;
 const FLARE_RESOLVER_URL = process.env.FLARE_RESOLVER_URL;
 
-const CACHE_FILE = "./last-guid.txt";
+// Use config directory if it exists, otherwise use current directory
+const CONFIG_DIR = fs.existsSync("/app/config") ? "/app/config" : ".";
+const CACHE_FILE = `${CONFIG_DIR}/last-guid.txt`;
+
+const rssFeedUrl = new URL(`${PROWLARR_URL}/${INDEXER_ID}/api`);
+rssFeedUrl.searchParams.set("apikey", PROWLARR_API_KEY);
+rssFeedUrl.searchParams.set("extended", "1");
+rssFeedUrl.searchParams.set("t", "search");
+rssFeedUrl.searchParams.set("q", "qxr");
 
 function formatBytes(bytes) {
   return (bytes / 1024 / 1024 / 1024).toFixed(2) + " GB";
@@ -101,9 +111,9 @@ async function checkFeed() {
 
   try {
     console.log(
-      `[${new Date().toISOString()}] Fetching RSS feed from ${RSS_FEED_URL}`
+      `[${new Date().toISOString()}] Fetching RSS feed from ${rssFeedUrl}`
     );
-    const res = await axios.get(RSS_FEED_URL);
+    const res = await axios.get(rssFeedUrl);
     const xml = res.data;
 
     const parser = new XMLParser({
@@ -116,6 +126,16 @@ async function checkFeed() {
     console.log(
       `[${new Date().toISOString()}] Found ${items.length} total items in feed`
     );
+
+    // If no previous GUID found, save the latest one and exit
+    if (lastGuid === null && items.length > 0) {
+      const latestGuid = items[0].guid;
+      console.log(
+        `[${new Date().toISOString()}] First run detected. Saving latest GUID: ${latestGuid}`
+      );
+      saveLastGuid(latestGuid);
+      return;
+    }
 
     const lastGuidIndex = items.findIndex((item) => item.guid === lastGuid);
     const relevantItems =

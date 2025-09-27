@@ -11,12 +11,12 @@ fi
 # Set variables
 TAG="latest"
 
-# Build the Docker image
+# Build the Docker image with multi-platform support
 echo "Building Docker image..."
-docker build -t ${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${TAG} .
+docker buildx create --use --name multi-platform-builder || true
+docker buildx build --platform linux/amd64,linux/arm64 --tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${TAG} --push .
 
-# Push the image to registry
-echo "Pushing image to registry..."
-docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${TAG}
+# Image is already pushed by buildx with --push flag
+echo "Image built and pushed with multi-platform support"
 
 echo "Build and push completed successfully!" 
