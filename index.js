@@ -55,22 +55,39 @@ async function sendToTelegram(message) {
   }
 }
 
-function loadLastGuid() {
+function loadLastGuids() {
   try {
-    const guid = fs.readFileSync(CACHE_FILE, "utf-8").trim();
-    console.log(`[${new Date().toISOString()}] Loaded last GUID: ${guid}`);
-    return guid;
+    const content = fs.readFileSync(CACHE_FILE, "utf-8").trim();
+    try {
+      const data = JSON.parse(content);
+      console.log(
+        `[${new Date().toISOString()}] Loaded GUIDs - guid1: ${
+          data.guid1
+        }, guid2: ${data.guid2 || "none"}`
+      );
+      return { guid1: data.guid1, guid2: data.guid2 || null };
+    } catch (jsonError) {
+      console.log(
+        `[${new Date().toISOString()}] Old format detected, migrating to new format`
+      );
+      return { guid1: content, guid2: null };
+    }
   } catch (error) {
     console.log(
-      `[${new Date().toISOString()}] No previous GUID found, starting fresh`
+      `[${new Date().toISOString()}] No previous GUIDs found, starting fresh`
     );
     return null;
   }
 }
 
-function saveLastGuid(guid) {
-  fs.writeFileSync(CACHE_FILE, guid, "utf-8");
-  console.log(`[${new Date().toISOString()}] Saved new GUID: ${guid}`);
+function saveLastGuids({ guid1, guid2 = null }) {
+  const data = { guid1, guid2 };
+  fs.writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2), "utf-8");
+  console.log(
+    `[${new Date().toISOString()}] Saved GUIDs - guid1: ${guid1}, guid2: ${
+      guid2 || "none"
+    }`
+  );
 }
 
 async function getFileDetails(url) {
@@ -107,7 +124,7 @@ async function getFileDetails(url) {
 
 async function checkFeed() {
   console.log(`[${new Date().toISOString()}] Starting feed check...`);
-  const lastGuid = loadLastGuid();
+  const lastGuids = loadLastGuids();
 
   try {
     console.log(
@@ -127,17 +144,38 @@ async function checkFeed() {
       `[${new Date().toISOString()}] Found ${items.length} total items in feed`
     );
 
-    // If no previous GUID found, save the latest one and exit
-    if (lastGuid === null && items.length > 0) {
+    if (lastGuids === null && items.length > 0) {
       const latestGuid = items[0].guid;
       console.log(
-        `[${new Date().toISOString()}] First run detected. Saving latest GUID: ${latestGuid}`
+        `[${new Date().toISOString()}] First run detected. Saving latest GUID as guid1: ${latestGuid}`
       );
-      saveLastGuid(latestGuid);
+      saveLastGuids({ guid1: latestGuid });
       return;
     }
 
-    const lastGuidIndex = items.findIndex((item) => item.guid === lastGuid);
+    let guid;
+    let lastGuidIndex;
+
+    const lastGuid1Index = items.findIndex(
+      (item) => item.guid === lastGuids.guid1
+    );
+
+    const lastGuid2Index = items.findIndex(
+      (item) => item.guid === lastGuids.guid2
+    );
+
+    if (lastGuid1Index !== -1) {
+      guid = lastGuids.guid1;
+      lastGuidIndex = lastGuid1Index;
+    } else if (lastGuid2Index !== -1) {
+      guid = lastGuids.guid2;
+      lastGuidIndex = lastGuid2Index;
+    } else {
+      console.error(`[${new Date().toISOString()}] No previous GUIDs found`);
+      lastGuidIndex = 0;
+      guid = items[lastGuidIndex].guid;
+    }
+
     const relevantItems =
       lastGuidIndex === -1 ? items : items.slice(0, lastGuidIndex);
 
@@ -154,7 +192,8 @@ async function checkFeed() {
       } new items`
     );
 
-    for (const item of relevantItems.reverse()) {
+    for (let i = relevantItems.length - 1; i >= 0; i--) {
+      const item = relevantItems[i];
       const title = item.title;
       const url = item.guid;
       const size = formatBytes(parseInt(item.size));
@@ -175,7 +214,13 @@ async function checkFeed() {
       await sendToTelegram(message);
     }
 
-    saveLastGuid(relevantItems[relevantItems.length - 1].guid);
+    const newGuid1 = relevantItems[0].guid;
+    const newGuid2 = guid;
+    console.log(
+      `[${new Date().toISOString()}] Saving new GUIDs - guid1: ${newGuid1}, guid2: ${newGuid2}`
+    );
+    saveLastGuids({ guid1: newGuid1, guid2: newGuid2 });
+
     console.log(
       `[${new Date().toISOString()}] Feed check completed successfully`
     );
