@@ -1,0 +1,8 @@
+node_modules
+.env
+.env.*
+!.env.example
+last-guid.txt
+.git
+*.md
+.dockerignore
