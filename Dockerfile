@@ -12,7 +12,7 @@ RUN bun install
 
 COPY src ./src/
 
-RUN bun build ./src/index.js --outfile=app.js --minify
+RUN bun build ./src/index.js --outfile=app.js --minify --target=bun
 
 # Run stage: minimal image with only the bundle
 FROM oven/bun:1-alpine
@@ -22,5 +22,7 @@ RUN mkdir -p /app/config
 VOLUME ["/app/config"]
 
 COPY --from=builder /app/app.js ./
+# Some runtimes/orchestrators expect index.js; keep both so either works
+RUN cp app.js index.js
 
-CMD ["bun", "run", "app.js"]
+CMD ["bun", "app.js"]
